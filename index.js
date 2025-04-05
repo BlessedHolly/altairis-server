@@ -48,6 +48,7 @@ const UserSchema = new mongoose.Schema({
   email: String,
   password: String,
   avatar: { type: String, default: "" }, // Теперь будем хранить URL Cloudinary
+  status: { type: String, default: "" },
 });
 
 const User = mongoose.model("User", UserSchema);
@@ -57,7 +58,7 @@ const generateTokens = (user) => {
   const accessToken = jwt.sign(
     { userId: user._id, email: user.email },
     ACCESS_SECRET,
-    { expiresIn: "15m" }
+    { expiresIn: "30d" }
   );
   const refreshToken = jwt.sign({ userId: user._id }, REFRESH_SECRET, {
     expiresIn: "7d",
@@ -155,6 +156,7 @@ app.get("/profile", authenticate, async (req, res) => {
         name: user.name,
         email: user.email,
         avatar: user.avatar,
+        status: user.status,
       },
     });
   } catch (error) {
@@ -334,6 +336,67 @@ app.patch("/update-email", async (req, res) => {
     });
   } catch (error) {
     console.error("Ошибка при обновлении email:", error);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+});
+
+app.patch("/update-status", async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return res
+        .status(401)
+        .json({ success: false, message: "Not authorized" });
+    }
+
+    const token = authHeader.split(" ")[1];
+
+    let decoded;
+    try {
+      decoded = jwt.verify(token, process.env.ACCESS_SECRET);
+    } catch (error) {
+      if (error.name === "TokenExpiredError") {
+        return res
+          .status(401)
+          .json({ success: false, message: "Token expired" });
+      }
+      if (error.name === "JsonWebTokenError") {
+        return res
+          .status(401)
+          .json({ success: false, message: "Invalid token" });
+      }
+      return res.status(500).json({ success: false, message: "Token error" });
+    }
+
+    const userId = decoded.userId;
+    const { status } = req.body;
+
+    if (typeof status !== "string") {
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid status" });
+    }
+
+    const updatedUser = await User.findByIdAndUpdate(
+      userId,
+      { $set: { status } },
+      { new: true }
+    );
+
+    if (!updatedUser) {
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found" });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Status updated successfully",
+      status: updatedUser.status,
+    });
+  } catch (error) {
+    console.error("Ошибка при обновлении статуса:", error);
     res.status(500).json({ success: false, message: "Server error" });
   }
 });
