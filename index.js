@@ -457,3 +457,15 @@ app.post("/create-post", uploadPostImage.single("image"), async (req, res) => {
     res.status(500).json({ success: false, message: "Server error" });
   }
 });
+
+// Получение всех пользователей
+app.get("/users", async (req, res) => {
+  try {
+    // Находим всех пользователей и исключаем поле password
+    const users = await User.find({}).select("-password");
+    res.status(200).json({ success: true, users });
+  } catch (error) {
+    console.error("Ошибка при получении пользователей:", error);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+});
