@@ -49,6 +49,13 @@ const UserSchema = new mongoose.Schema({
   password: String,
   avatar: { type: String, default: "" }, // Теперь будем хранить URL Cloudinary
   status: { type: String, default: "" },
+  posts: [
+    {
+      image: String,
+      description: String,
+      date: Date,
+    },
+  ],
 });
 
 const User = mongoose.model("User", UserSchema);
@@ -157,6 +164,7 @@ app.get("/profile", authenticate, async (req, res) => {
         email: user.email,
         avatar: user.avatar,
         status: user.status,
+        posts: user.posts,
       },
     });
   } catch (error) {
@@ -251,22 +259,20 @@ app.patch(
   }
 );
 
-// Выход
-app.post("/logout", (req, res) => {
-  res
-    .clearCookie("userId")
-    .json({ success: true, message: "Вы вышли из аккаунта" });
-});
-
 // Удаление аккаунта
 app.delete("/delete-account", async (req, res) => {
   try {
-    const userId = req.cookies.userId;
-    if (!userId) {
+    const authHeader = req.headers.authorization;
+
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
       return res
         .status(401)
         .json({ success: false, message: "Not authorized" });
     }
+
+    const token = authHeader.split(" ")[1];
+    const decoded = jwt.verify(token, process.env.ACCESS_SECRET);
+    const userId = decoded.userId;
 
     const user = await User.findByIdAndDelete(userId);
     if (!user) {
@@ -275,9 +281,7 @@ app.delete("/delete-account", async (req, res) => {
         .json({ success: false, message: "User not found" });
     }
 
-    res
-      .clearCookie("userId")
-      .json({ success: true, message: "Account deleted successfully" });
+    res.json({ success: true, message: "Account deleted successfully" });
   } catch (error) {
     console.error("Ошибка при удалении аккаунта:", error);
     res.status(500).json({ success: false, message: "Server error" });
@@ -397,6 +401,59 @@ app.patch("/update-status", async (req, res) => {
     });
   } catch (error) {
     console.error("Ошибка при обновлении статуса:", error);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+});
+
+const postStorageCloudinary = new CloudinaryStorage({
+  cloudinary: cloudinary,
+  params: {
+    folder: "posts",
+    format: async (req, file) => "jpg", // или png/webp
+    public_id: () => `post_${Date.now()}`,
+  },
+});
+
+const uploadPostImage = multer({ storage: postStorageCloudinary });
+
+app.post("/create-post", uploadPostImage.single("image"), async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return res
+        .status(401)
+        .json({ success: false, message: "Not authorized" });
+    }
+
+    const token = authHeader.split(" ")[1];
+    const decoded = jwt.verify(token, process.env.ACCESS_SECRET);
+    const userId = decoded.userId;
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found" });
+    }
+
+    if (!req.file?.path || req.body.description === undefined) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Missing image or description" });
+    }
+
+    const newPost = {
+      image: req.file.path,
+      description: req.body.description,
+      date: new Date(),
+    };
+
+    user.posts.push(newPost);
+    await user.save();
+
+    res.status(201).json({ success: true, post: newPost });
+  } catch (error) {
+    console.error("Ошибка при создании поста:", error);
     res.status(500).json({ success: false, message: "Server error" });
   }
 });
