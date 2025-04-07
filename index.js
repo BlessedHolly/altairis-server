@@ -469,3 +469,71 @@ app.get("/users", async (req, res) => {
     res.status(500).json({ success: false, message: "Server error" });
   }
 });
+
+// Удаление поста по id
+app.delete("/delete-post", authenticate, async (req, res) => {
+  const { id } = req.body;
+
+  if (!id) {
+    return res
+      .status(400)
+      .json({ success: false, message: "Post ID required" });
+  }
+
+  try {
+    const result = await User.updateOne(
+      { _id: req.userId },
+      { $pull: { posts: { _id: id } } }
+    );
+
+    if (result.modifiedCount === 0) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Post not found or already deleted" });
+    }
+
+    res
+      .status(200)
+      .json({ success: true, message: "Post deleted successfully" });
+  } catch (error) {
+    console.error("Ошибка при удалении поста:", error);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+});
+
+// получения чужого профиля по id
+app.get("/user-profile/:userId", authenticate, async (req, res) => {
+  const { userId } = req.params;
+
+  // Проверяем, является ли userId валидным ObjectId
+  if (!mongoose.Types.ObjectId.isValid(userId)) {
+    return res.status(400).json({ success: false, message: "Invalid user ID" });
+  }
+
+  try {
+    const targetUser = await User.findById(userId).select(
+      "name avatar status posts"
+    );
+
+    if (!targetUser) {
+      return res.status(404).json({ success: false, message: "not found" });
+    }
+
+    if (userId === req.userId) {
+      return res.status(200).json({ success: true, message: "same user" });
+    }
+
+    res.status(200).json({
+      success: true,
+      user: {
+        name: targetUser.name,
+        avatar: targetUser.avatar,
+        status: targetUser.status,
+        posts: targetUser.posts,
+      },
+    });
+  } catch (error) {
+    console.error("Ошибка при получении чужого профиля:", error);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+});
