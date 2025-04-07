@@ -502,7 +502,7 @@ app.delete("/delete-post", authenticate, async (req, res) => {
 });
 
 // получения чужого профиля по id
-app.get("/user-profile/:userId", authenticate, async (req, res) => {
+app.get("/user-profile/:userId", async (req, res) => {
   const { userId } = req.params;
 
   // Проверяем, является ли userId валидным ObjectId
