@@ -458,14 +458,37 @@ app.post("/create-post", uploadPostImage.single("image"), async (req, res) => {
   }
 });
 
-// Получение всех пользователей
-app.get("/users", async (req, res) => {
+app.get("/posts", async (req, res) => {
   try {
-    // Находим всех пользователей и исключаем поле password
-    const users = await User.find({}).select("-password");
-    res.status(200).json({ success: true, users });
+    const limit = parseInt(req.query.limit) || 10;
+    const page = parseInt(req.query.page) || 1;
+    const skip = (page - 1) * limit;
+
+    // Получаем всех пользователей с постами
+    const users = await User.find({}).select("name _id posts");
+
+    // Объединяем все посты в один массив
+    const allPosts = users.flatMap((user) =>
+      user.posts.map((post) => ({
+        ...post.toObject(),
+        userName: user.name,
+        userId: user._id,
+      }))
+    );
+
+    const sortedPosts = allPosts.sort(
+      (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+    );
+
+    const paginatedPosts = sortedPosts.slice(skip, skip + limit);
+
+    res.status(200).json({
+      success: true,
+      posts: paginatedPosts,
+      total: sortedPosts.length,
+    });
   } catch (error) {
-    console.error("Ошибка при получении пользователей:", error);
+    console.error("Ошибка при получении постов:", error);
     res.status(500).json({ success: false, message: "Server error" });
   }
 });
@@ -504,10 +527,24 @@ app.delete("/delete-post", authenticate, async (req, res) => {
 // получения чужого профиля по id
 app.get("/user-profile/:userId", async (req, res) => {
   const { userId } = req.params;
+  const authHeader = req.headers.authorization;
 
-  // Проверяем, является ли userId валидным ObjectId
   if (!mongoose.Types.ObjectId.isValid(userId)) {
     return res.status(400).json({ success: false, message: "Invalid user ID" });
+  }
+
+  let currentUserId = null;
+
+  // Если есть авторизация — декодируем токен
+  if (authHeader?.startsWith("Bearer ")) {
+    const token = authHeader.split(" ")[1];
+    try {
+      const decoded = jwt.verify(token, process.env.ACCESS_SECRET); // добавь JWT_SECRET в .env
+      currentUserId = decoded.userId;
+    } catch (err) {
+      // Не обязательно кидать ошибку — просто игнорируем
+      console.log("Токен невалиден или истёк");
+    }
   }
 
   try {
@@ -519,10 +556,12 @@ app.get("/user-profile/:userId", async (req, res) => {
       return res.status(404).json({ success: false, message: "not found" });
     }
 
-    if (userId === req.userId) {
+    // Если авторизован и ID совпадают
+    if (currentUserId && currentUserId === userId) {
       return res.status(200).json({ success: true, message: "same user" });
     }
 
+    // Вернуть чужой профиль
     res.status(200).json({
       success: true,
       user: {
