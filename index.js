@@ -576,3 +576,7 @@ app.get("/user-profile/:userId", async (req, res) => {
     res.status(500).json({ success: false, message: "Server error" });
   }
 });
+
+app.get("/ping", (req, res) => {
+  res.send("pong");
+});
