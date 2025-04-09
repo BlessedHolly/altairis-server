@@ -580,3 +580,53 @@ app.get("/user-profile/:userId", async (req, res) => {
 app.get("/ping", (req, res) => {
   res.send("pong");
 });
+
+const Chat = require("./models/Chat");
+
+app.get("/chats", authenticate, async (req, res) => {
+  try {
+    const chats = await Chat.find({ participants: req.userId })
+      .populate("participants", "_id name avatar")
+      .exec();
+
+    res.json({ success: true, chats, userId: req.userId });
+  } catch (error) {
+    console.error("Ошибка при получении чатов:", error);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+});
+
+app.post("/send-message", authenticate, async (req, res) => {
+  const { userId: recipientId, message } = req.body;
+
+  if (!recipientId || !message) {
+    return res.status(400).json({ success: false, message: "Missing fields" });
+  }
+
+  try {
+    const participants = [req.userId, recipientId].sort();
+
+    let chat = await Chat.findOne({
+      participants: { $all: participants, $size: 2 },
+    });
+
+    const newMessage = {
+      sender: req.userId,
+      text: message,
+      date: new Date(),
+    };
+
+    if (!chat) {
+      chat = new Chat({ participants, messages: [newMessage] });
+    } else {
+      chat.messages.push(newMessage);
+    }
+
+    await chat.save();
+
+    res.json({ success: true, message: newMessage });
+  } catch (error) {
+    console.error("Ошибка при отправке сообщения:", error);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+});
