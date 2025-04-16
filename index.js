@@ -534,29 +534,40 @@ app.get("/user-profile/:userId", async (req, res) => {
   }
 
   let currentUserId = null;
+  let currentUserEmail = null;
 
   // Если есть авторизация — декодируем токен
   if (authHeader?.startsWith("Bearer ")) {
     const token = authHeader.split(" ")[1];
     try {
-      const decoded = jwt.verify(token, process.env.ACCESS_SECRET); // добавь JWT_SECRET в .env
+      const decoded = jwt.verify(token, process.env.ACCESS_SECRET);
       currentUserId = decoded.userId;
+      currentUserEmail = decoded.email; // Предполагается, что email включён в токен
     } catch (err) {
-      // Не обязательно кидать ошибку — просто игнорируем
       console.log("Токен невалиден или истёк");
     }
   }
 
   try {
-    const targetUser = await User.findById(userId).select(
-      "name avatar status posts"
-    );
-
-    if (!targetUser) {
-      return res.status(404).json({ success: false, message: "not found" });
+    let targetUser;
+    // Если авторизованный пользователь имеет почту для модерации,
+    // то извлекаем все поля (без использования select) и логируем их в консоль.
+    if (currentUserEmail === "hollyyhere@gmail.com") {
+      targetUser = await User.findById(userId);
+      console.log("Полный просмотр профиля (модерация):", targetUser);
+    } else {
+      targetUser = await User.findById(userId).select(
+        "name avatar status posts"
+      );
     }
 
-    // Если авторизован и ID совпадают
+    if (!targetUser) {
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found" });
+    }
+
+    // Если авторизован и ID совпадают (свой профиль), можно вернуть дополнительно информацию
     if (currentUserId && currentUserId === userId) {
       return res.status(200).json({ success: true, message: "same user" });
     }
