@@ -414,7 +414,7 @@ const postStorageCloudinary = new CloudinaryStorage({
   },
 });
 
-const uploadPostImage = multer({ storage: postStorageCloudinary });
+const uploadPostMedia = multer({ storage: postStorageCloudinary });
 
 app.post(
   "/create-post",
