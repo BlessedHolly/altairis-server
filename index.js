@@ -416,47 +416,54 @@ const postStorageCloudinary = new CloudinaryStorage({
 
 const uploadPostImage = multer({ storage: postStorageCloudinary });
 
-app.post("/create-post", uploadPostImage.single("image"), async (req, res) => {
-  try {
-    const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
-      return res
-        .status(401)
-        .json({ success: false, message: "Not authorized" });
+app.post(
+  "/create-post",
+  uploadPostMedia.fields([
+    { name: "image", maxCount: 1 },
+    { name: "video", maxCount: 1 },
+  ]),
+  async (req, res) => {
+    try {
+      const authHeader = req.headers.authorization;
+      if (!authHeader || !authHeader.startsWith("Bearer ")) {
+        return res
+          .status(401)
+          .json({ success: false, message: "Not authorized" });
+      }
+
+      const token = authHeader.split(" ")[1];
+      const decoded = jwt.verify(token, process.env.ACCESS_SECRET);
+      const userId = decoded.userId;
+
+      const user = await User.findById(userId);
+      if (!user) {
+        return res
+          .status(404)
+          .json({ success: false, message: "User not found" });
+      }
+
+      if (!req.file?.path || req.body.description === undefined) {
+        return res
+          .status(400)
+          .json({ success: false, message: "Missing image or description" });
+      }
+
+      const newPost = {
+        image: req.file.path,
+        description: req.body.description,
+        date: new Date(),
+      };
+
+      user.posts.push(newPost);
+      await user.save();
+
+      res.status(201).json({ success: true, post: newPost });
+    } catch (error) {
+      console.error("Ошибка при создании поста:", error);
+      res.status(500).json({ success: false, message: "Server error" });
     }
-
-    const token = authHeader.split(" ")[1];
-    const decoded = jwt.verify(token, process.env.ACCESS_SECRET);
-    const userId = decoded.userId;
-
-    const user = await User.findById(userId);
-    if (!user) {
-      return res
-        .status(404)
-        .json({ success: false, message: "User not found" });
-    }
-
-    if (!req.file?.path || req.body.description === undefined) {
-      return res
-        .status(400)
-        .json({ success: false, message: "Missing image or description" });
-    }
-
-    const newPost = {
-      image: req.file.path,
-      description: req.body.description,
-      date: new Date(),
-    };
-
-    user.posts.push(newPost);
-    await user.save();
-
-    res.status(201).json({ success: true, post: newPost });
-  } catch (error) {
-    console.error("Ошибка при создании поста:", error);
-    res.status(500).json({ success: false, message: "Server error" });
   }
-});
+);
 
 app.get("/posts", async (req, res) => {
   try {
