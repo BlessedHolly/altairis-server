@@ -650,6 +650,7 @@ app.post("/send-message", authenticate, async (req, res) => {
     res.json({ success: true, message: newMessage });
   } catch (error) {
     console.error("Ошибка при отправке сообщения:", error);
+
     res.status(500).json({ success: false, message: "Server error" });
   }
 });
